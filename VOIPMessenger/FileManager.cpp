@@ -5,7 +5,7 @@
 
 using namespace std;
 
-#define FILE_NAME "C:\\Users\\Fierce\\Desktop\\messages.txt"
+#define FILE_NAME "messages.txt"
 
 FileManager::FileManager() {
 }
