@@ -141,7 +141,6 @@ void NetworkerUDP::ThreadReceive() {
 		resultCode = recvfrom(hostSocket, recvbuf, recvbuflen, 0, (sockaddr*)&dest, &destSize);
 		if (resultCode > 0) {
 			// Successfully received data
-			printf("UDP received message: %.*s\n", resultCode, recvbuf);
 			controller->ReceiveAudioData(recvbuf, resultCode);
 		} else {
 			int lastError = WSAGetLastError();
@@ -172,7 +171,6 @@ void NetworkerUDP::ThreadSend() {
 		// Send message over network
 		if (bufferCount > 0) {
 			resultCode = sendto(hostSocket, dataBuffer.front(), dataSizeBuffer.front(), 0, (sockaddr*)&dest, destSize);
-			printf("UDP sent message: %.*s\n", dataSizeBuffer.front(), dataBuffer.front());
 			delete[] dataBuffer.front();
 			dataBuffer.pop();
 			dataSizeBuffer.pop();

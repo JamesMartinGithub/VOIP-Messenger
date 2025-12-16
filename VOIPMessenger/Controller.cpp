@@ -218,16 +218,16 @@ void Controller::SendAudioFormat(WAVEFORMATEX* format) {
 
 void Controller::SendAudioData(unsigned char* buffer, unsigned int frameNum, int size) {
 	std::cout << "AUDIO DATA SIZE: " << size << '\n';
-	char* joinedData = new char[size + uintSize];
+	char* joinedData = new char[uintSize + size];
 	memcpy(joinedData, &frameNum, uintSize);
 	memcpy(&joinedData[uintSize], buffer, size);
-	networkerUDP->SendData(joinedData, size + uintSize);
+	networkerUDP->SendData(joinedData, uintSize + size);
 }
 
 void Controller::ReceiveAudioData(char* data, int size) {
 	if (!applicationClosed) {
-		unsigned char* buffer = new unsigned char[size - uintSize];
 		unsigned int frameNumUInt;
+		unsigned char* buffer = new unsigned char[size - uintSize];
 		memcpy(&frameNumUInt, data, uintSize);
 		memcpy(buffer, &data[uintSize], size - uintSize);
 		audioOutput->UpdateBuffer(buffer, frameNumUInt);

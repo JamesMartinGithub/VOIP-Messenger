@@ -16,9 +16,9 @@
               if (FAILED(hres)) { CloseStream(true); return false; }
 #define EXIT_ON_ERROR_RETURN_NAMES(hres, names)  \
               if (FAILED(hres)) { CloseStream(true); return names; }
-#define SAFE_RELEASE(punk)  \
-              if ((punk) != NULL && (punk) != nullptr)  \
-                { (punk)->Release(); (punk) = NULL; }
+#define SAFE_RELEASE(interface)  \
+              if ((interface) != NULL && (interface) != nullptr)  \
+                { (interface)->Release(); (interface) = NULL; }
 
 AudioInput::AudioInput(Controller* pController) 
     : controller(pController) {
