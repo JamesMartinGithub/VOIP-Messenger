@@ -82,7 +82,6 @@ void Controller::Disconnect() {
 void Controller::DisplayConnectionState(std::string message, ConnectionType connection, bool isTCP) {
 	if (isTCP && connection == ConnectionType::DISCONNECTED) {
 		DisconnectCall(true);
-		QMetaObject::invokeMethod(window, "DisplayConnectionState", Qt::QueuedConnection, Q_ARG(std::string, "Call ended"), Q_ARG(ConnectionType, ConnectionType::CONNECTING), Q_ARG(bool, false));
 	}
 	QMetaObject::invokeMethod(window, "DisplayConnectionState", Qt::QueuedConnection, Q_ARG(std::string, message), Q_ARG(ConnectionType, connection), Q_ARG(bool, isTCP));
 }
@@ -120,7 +119,6 @@ void Controller::ReceiveData(char* message, int size) {
 				case 'D':
 					// Friend ended call
 					DisconnectCall(true);
-					DisplayConnectionState("Friend ended call", ConnectionType::DISCONNECTED, false);
 					break;
 			}
 			break;
@@ -193,15 +191,19 @@ void Controller::ConnectCall() {
 }
 
 void Controller::DisconnectCall(bool disconnectByFriend) {
-	friendCalling = false;
-	audioInput->Stop();
-	audioOutput->Stop();
-	networkerUDP->Disconnect();
-	if (!disconnectByFriend) {
-		// Notify friend call ended, and to stop sending audio data
-		char* message = new char[3] {"!D"};
-		SendData(message, 3);
-		DisplayConnectionState("Call ended", ConnectionType::DISCONNECTED, false);
+	if (networkerUDP->IsConnected()) {
+		friendCalling = false;
+		audioInput->Stop();
+		audioOutput->Stop();
+		networkerUDP->Disconnect();
+		if (!disconnectByFriend) {
+			// Notify friend call ended, and to stop sending audio data
+			char* message = new char[3] {"!D"};
+			SendData(message, 3);
+			DisplayConnectionState("Call ended", ConnectionType::DISCONNECTED, false);
+		} else {
+			DisplayConnectionState("Friend ended call", ConnectionType::DISCONNECTED, false);
+		}
 	}
 }
 
@@ -210,26 +212,37 @@ void Controller::SetInputDevice(int index) {
 }
 
 void Controller::SendAudioFormat(WAVEFORMATEX* format) {
+	inputDeviceBlockAlign = format->nBlockAlign;
+	inputDeviceChannels = format->nChannels;
 	char formatData[sizeof(WAVEFORMATEX) + 1];
 	formatData[0] = '?';
 	memcpy(&formatData[1], format, sizeof(WAVEFORMATEX));
 	networkerTCP->SendData(formatData, sizeof(formatData));
 }
 
-void Controller::SendAudioData(unsigned char* buffer, unsigned int frameNum, int size) {
-	std::cout << "AUDIO DATA SIZE: " << size << '\n';
-	char* joinedData = new char[uintSize + size];
-	memcpy(joinedData, &frameNum, uintSize);
-	memcpy(&joinedData[uintSize], buffer, size);
-	networkerUDP->SendData(joinedData, uintSize + size);
+void Controller::UpdateSendBuffer(unsigned char* buffer, int size) {
+	char* data;
+	if (inputDeviceChannels != 1) {
+		data = new char[size / inputDeviceChannels];
+		for (int i = 0; i < size / inputDeviceChannels; i++) {
+			data[i] = buffer[i + (inputDeviceBlockAlign * (i / inputDeviceBlockAlign))];
+		}
+		networkerUDP->SendData(data, size / inputDeviceChannels);
+	} else {
+		data = new char[size];
+		memcpy(data, buffer, size);
+		networkerUDP->SendData(data, size);
+	}
+}
+
+void Controller::NotifySendThread() {
+	networkerUDP->NotifySendThread();
 }
 
 void Controller::ReceiveAudioData(char* data, int size) {
 	if (!applicationClosed) {
-		unsigned int frameNumUInt;
-		unsigned char* buffer = new unsigned char[size - uintSize];
-		memcpy(&frameNumUInt, data, uintSize);
-		memcpy(buffer, &data[uintSize], size - uintSize);
-		audioOutput->UpdateBuffer(buffer, frameNumUInt);
+		unsigned char* buffer = new unsigned char[size];
+		memcpy(buffer, data, size);
+		audioOutput->UpdateBuffer(buffer, size);
 	}
 }

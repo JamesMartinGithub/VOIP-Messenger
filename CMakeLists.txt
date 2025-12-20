@@ -25,6 +25,6 @@ link_directories("C:/Qt/6.9.1/msvc2022_64/include")
 find_package(Qt6Core REQUIRED)
 find_package(Qt6Widgets REQUIRED)
 
-add_executable(VOIPMessenger WIN32 "VOIPMessenger/VOIPMessenger.cpp" "VOIPMessenger/VOIPMessenger.h" "VOIPMessenger/Controller.cpp" "VOIPMessenger/Controller.h" "VOIPMessenger/MainWindow.cpp" "VOIPMessenger/MainWindow.h" "VOIPMessenger/MainWindow.ui" "VOIPMessenger/NetworkerTCP.cpp" "VOIPMessenger/NetworkerTCP.h"  "VOIPMessenger/FileManager.cpp" "VOIPMessenger/FileManager.h" "VOIPMessenger/AudioInput.cpp" "VOIPMessenger/AudioInput.h" "VOIPMessenger/AudioOutput.cpp" "VOIPMessenger/AudioOutput.h" "VOIPMessenger/VoiceCallback.cpp" "VOIPMessenger/VoiceCallback.h" "VOIPMessenger/NetworkerUDP.cpp" "VOIPMessenger/NetworkerUDP.h")
+add_executable(VOIPMessenger WIN32 "VOIPMessenger/VOIPMessenger.cpp" "VOIPMessenger/VOIPMessenger.h" "VOIPMessenger/Controller.cpp" "VOIPMessenger/Controller.h" "VOIPMessenger/MainWindow.cpp" "VOIPMessenger/MainWindow.h" "VOIPMessenger/MainWindow.ui" "VOIPMessenger/NetworkerTCP.cpp" "VOIPMessenger/NetworkerTCP.h"  "VOIPMessenger/FileManager.cpp" "VOIPMessenger/FileManager.h" "VOIPMessenger/AudioInput.cpp" "VOIPMessenger/AudioInput.h" "VOIPMessenger/AudioOutput.cpp" "VOIPMessenger/AudioOutput.h" "VOIPMessenger/VoiceCallback.cpp" "VOIPMessenger/VoiceCallback.h" "VOIPMessenger/NetworkerUDP.cpp" "VOIPMessenger/NetworkerUDP.h" "VOIPMessenger/rigtorp/MPMCQueue.h")
 target_link_libraries(VOIPMessenger Ws2_32.lib xaudio2.lib Qt6::Widgets)
 include_directories("VOIPMessenger")

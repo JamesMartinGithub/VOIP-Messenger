@@ -3,6 +3,7 @@
 
 #include <string>
 #include <list>
+#include <atomic>
 
 class Controller;
 struct IMMDeviceCollection;
@@ -33,7 +34,7 @@ private:
 	void CloseStream(bool failed = false);
 
 	Controller* controller;
-	BOOL inputShouldEnd = FALSE;
+	std::atomic<BOOL> inputShouldEnd = FALSE;
 	IMMDeviceCollection* deviceCollection = NULL;
 	IMMDeviceEnumerator* deviceEnumerator = NULL;
 	IMMDevice* inputDevice = NULL;

@@ -46,7 +46,8 @@ public:
 	void DisconnectCall(bool disconnectByFriend = false);
 	void SetInputDevice(int index);
 	void SendAudioFormat(WAVEFORMATEX* format);
-	void SendAudioData(unsigned char* buffer, unsigned int frameNum, int size);
+	void UpdateSendBuffer(unsigned char* buffer, int size);
+	void NotifySendThread();
 	void ReceiveAudioData(char* data, int size);
 
 private:
@@ -59,9 +60,10 @@ private:
 	bool friendCalling = false;
 	char* serverIp = nullptr;
 	char* serverPort = nullptr;
-	const int uintSize = sizeof(unsigned int);
 	bool isServer = false;
 	bool applicationClosed = false;
+	int inputDeviceBlockAlign = -1;
+	int inputDeviceChannels = 1;
 };
 
 #endif // CONTROLLER_H

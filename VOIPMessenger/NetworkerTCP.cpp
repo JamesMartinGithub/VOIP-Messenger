@@ -230,7 +230,7 @@ void NetworkerTCP::ThreadReceive() {
 		resultCode = recv(hostSocket, recvbuf, recvbuflen, 0);
 		if (resultCode > 0) {
 			// Successfully received message
-			printf("TCP received message: %.*s\n", resultCode, recvbuf);
+			printf("TCP received message: %.*s\n", 2, recvbuf);
 			controller->ReceiveData(recvbuf, resultCode);
 		}
 		else {
@@ -269,7 +269,7 @@ void NetworkerTCP::ThreadSend() {
 			WSACleanup();
 			break;
 		}
-		printf("TCP sent message: %.*s\n", messageSize, messageToSend);
+		printf("TCP sent message: %.*s\n", 2, messageToSend);
 		messageSize = 0;
 	} while (true);
 }

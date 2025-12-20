@@ -17,8 +17,8 @@
 #define EXIT_ON_ERROR_RETURN_NAMES(hres, names)  \
               if (FAILED(hres)) { CloseStream(true); return names; }
 #define SAFE_RELEASE(interface)  \
-              if ((interface) != NULL && (interface) != nullptr)  \
-                { (interface)->Release(); (interface) = NULL; }
+              if (interface != NULL && interface != nullptr)  \
+                { interface->Release(); interface = NULL; }
 
 AudioInput::AudioInput(Controller* pController) 
     : controller(pController) {
@@ -147,7 +147,7 @@ void AudioInput::RecordAudioStream() {
     BYTE* pData;
     DWORD flags;
 
-    // Each loop fills about half of the shared buffer.
+    // Each loop fills about half of the shared buffer
     while (inputShouldEnd == FALSE) {
         // Sleep for half the buffer duration.
         Sleep(hnsActualDuration / REFTIMES_PER_MILLISEC / 2);
@@ -156,25 +156,25 @@ void AudioInput::RecordAudioStream() {
         }
         hr = captureClient->GetNextPacketSize(&packetLength);
         EXIT_ON_ERROR(hr)
-            while (packetLength != 0) {
-                // Get the available data in the shared buffer.
-                hr = captureClient->GetBuffer(&pData, &numFramesAvailable, &flags, NULL, NULL);
-                EXIT_ON_ERROR(hr)
-                if (applicationClosed) {
-                    return;
-                }
-                if (flags & AUDCLNT_BUFFERFLAGS_SILENT) {
-                    pData = NULL;  // Tell CopyData to write silence.
-                }
-                // Send available capture data to controller
-                controller->SendAudioData(pData, numFramesAvailable, numFramesAvailable * frameSize);
-                hr = captureClient->ReleaseBuffer(numFramesAvailable);
-                EXIT_ON_ERROR(hr)
-                hr = captureClient->GetNextPacketSize(&packetLength);
-                EXIT_ON_ERROR(hr)
+        while (packetLength != 0) {
+            // Get the available data in the shared buffer
+            hr = captureClient->GetBuffer(&pData, &numFramesAvailable, &flags, NULL, NULL);
+            EXIT_ON_ERROR(hr)
+            if (applicationClosed) {
+                return;
             }
+            if (!(flags & AUDCLNT_BUFFERFLAGS_SILENT)) {
+                // Send available capture data to controller
+                controller->UpdateSendBuffer(pData, numFramesAvailable * frameSize);
+            }
+            hr = captureClient->ReleaseBuffer(numFramesAvailable);
+            EXIT_ON_ERROR(hr)
+            hr = captureClient->GetNextPacketSize(&packetLength);
+            EXIT_ON_ERROR(hr)
+        }
+        controller->NotifySendThread();
     }
-    // Stop recording.
+    // Stop recording
     hr = audioClient->Stop();
     if (FAILED(hr)) {
         CloseStream(true);
@@ -191,6 +191,6 @@ void AudioInput::CloseStream(bool failed) {
     SAFE_RELEASE(audioClient)
     SAFE_RELEASE(captureClient)
     if (failed) {
-        std::cout << "Audio input stopped: ERROR\n";
+        printf("Audio input stopped due to error");
     }
 }

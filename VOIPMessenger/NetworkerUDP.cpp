@@ -1,7 +1,5 @@
 #include "NetworkerUDP.h"
 #include "Controller.h"
-#define WIN32_LEAN_AND_MEAN
-#include <winsock2.h>
 #include <ws2tcpip.h>
 #include <iostream>
 
@@ -9,24 +7,14 @@
 #define DEFAULT_BUFLEN 8192
 
 NetworkerUDP::NetworkerUDP(Controller* pController)
-	: controller(pController) {
+	: controller(pController)
+	, sendDataBuffer(35) {
 }
 
 NetworkerUDP::~NetworkerUDP() {
 	applicationClosed = true;
-	shutdown(hostSocket, SD_BOTH);
-	closesocket(hostSocket);
+	Disconnect();
 	WSACleanup();
-	{
-		std::lock_guard lk(mutex);
-		sendShouldWake = true;
-	}
-	sendCv.notify_one();
-	while (bufferCount > 0) {
-		delete[] dataBuffer.front();
-		dataBuffer.pop();
-		bufferCount--;
-	}
 }
 
 void NetworkerUDP::SetServer(bool pIsServer) {
@@ -42,16 +30,19 @@ void NetworkerUDP::SetDestinationAddress(sockaddr* address) {
 	destSize = sizeof(dest);
 }
 
+bool NetworkerUDP::IsConnected() {
+	return connected;
+}
+
 bool NetworkerUDP::Connect(const char* ip) {
 	if (!connected) {
-		lastDisconnectLocal = false;
 		sockaddr_in local;
 		WSAData data;
 
 		// Initialize Winsock DLL
 		int resultCode = WSAStartup(MAKEWORD(2, 2), &data);
 		if (resultCode == SOCKET_ERROR) {
-			std::cout << "UDP STARTUP ERROR: " << WSAGetLastError() << "\n";
+			printf("UDP startup error: %d\n", WSAGetLastError());
 			CancelInitialise("Unable to connect voice");
 			return false;
 		}
@@ -76,21 +67,30 @@ bool NetworkerUDP::Connect(const char* ip) {
 		local = *reinterpret_cast<sockaddr_in*>(result->ai_addr);
 
 		// Create socket
-		resultCode = hostSocket = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
-		if (resultCode == SOCKET_ERROR) {
-			std::cout << "UDP socket error: " << WSAGetLastError() << "\n";
+		hostSocket = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+		if (hostSocket == INVALID_SOCKET) {
+			printf("UDP socket error: %d\n", WSAGetLastError());
 			CancelInitialise("Unable to connect voice");
 			return false;
 		}
 		// Enable socket to re-use TCP port
-		BOOL bOptVal = TRUE;
+		BOOL reuseaddrOptVal = TRUE;
 		int bOptLen = sizeof(BOOL);
-		setsockopt(hostSocket, SOL_SOCKET, SO_REUSEADDR, (char*)&bOptVal, bOptLen);
+		setsockopt(hostSocket, SOL_SOCKET, SO_REUSEADDR, (char*)&reuseaddrOptVal, bOptLen);
+		// Disable socket lingering when closesocket() called
+		BOOL dontlingerOptVal = TRUE;
+		setsockopt(hostSocket, SOL_SOCKET, SO_DONTLINGER, (char*)&dontlingerOptVal, bOptLen);
+		// Set send timeout to 1 second
+		struct timeval sendtimeoutOptVal;
+		sendtimeoutOptVal.tv_sec = 1;
+		sendtimeoutOptVal.tv_usec = 0;
+		setsockopt(hostSocket, SOL_SOCKET, SO_SNDTIMEO, (char*)&sendtimeoutOptVal, sizeof(timeval));
+		 
 
 		// Bind local ip to socket
 		resultCode = bind(hostSocket, (sockaddr*)&local, sizeof(local));
 		if (resultCode == SOCKET_ERROR) {
-			std::cout << "UDP bind error: " << WSAGetLastError() << "\n";
+			printf("UDP bind error: %d\n", WSAGetLastError());
 			CancelInitialise("Unable to connect voice");
 			return false;
 		}
@@ -104,7 +104,7 @@ bool NetworkerUDP::Connect(const char* ip) {
 		std::thread sendThread([this] { this->ThreadSend(); });
 		receiveThread.detach();
 		sendThread.detach();
-		std::cout << "UDP started!" << '\n';
+		printf("UDP started!\n");
 
 		// Print local and destination sockets for debugging
 		sockaddr thisAddress;
@@ -119,7 +119,6 @@ bool NetworkerUDP::Connect(const char* ip) {
 }
 
 void NetworkerUDP::Disconnect() {
-	lastDisconnectLocal = true;
 	shutdown(hostSocket, SD_BOTH);
 	closesocket(hostSocket);
 	CancelInitialise("");
@@ -127,6 +126,11 @@ void NetworkerUDP::Disconnect() {
 
 void NetworkerUDP::CancelInitialise(std::string disconnectMessage) {
 	connected = false;
+	sendCv.notify_one();
+	Data* data;
+	while (sendDataBuffer.try_pop(data)) {
+		delete data;
+	}
 	if (disconnectMessage != "" && !applicationClosed) {
 		controller->DisplayConnectionState(disconnectMessage, Controller::ConnectionType::DISCONNECTED, false);
 	}
@@ -143,15 +147,13 @@ void NetworkerUDP::ThreadReceive() {
 			// Successfully received data
 			controller->ReceiveAudioData(recvbuf, resultCode);
 		} else {
+			// Socket error occurred
 			int lastError = WSAGetLastError();
+			printf("UDP recv failed: %d\n", lastError);
 			if (lastError == WSAECONNRESET) {
-				std::cout << "ICMP unreachable server" << '\n';
+				controller->DisconnectCall(true);
 			} else {
-				// Connection error
-				printf("UDP recv failed: %d\n", lastError);
-				shutdown(hostSocket, SD_BOTH);
-				closesocket(hostSocket);
-				CancelInitialise(lastDisconnectLocal ? "" : "Friend disconnected");
+				controller->DisconnectCall();
 				break;
 			}
 		}
@@ -163,50 +165,45 @@ void NetworkerUDP::ThreadSend() {
 	do {
 		// Block thread until notified by sendShouldWake
 		std::unique_lock lock(mutex);
-		sendCv.wait(lock, [this] { return sendShouldWake; });
-		sendShouldWake = false;
-		if (applicationClosed) {
-			break;
-		}
-		// Send message over network
-		if (bufferCount > 0) {
-			resultCode = sendto(hostSocket, dataBuffer.front(), dataSizeBuffer.front(), 0, (sockaddr*)&dest, destSize);
-			delete[] dataBuffer.front();
-			dataBuffer.pop();
-			dataSizeBuffer.pop();
-			bufferCount--;
-		} else {
-			resultCode = 0;
-		}
-		if (resultCode == SOCKET_ERROR) {
-			if (applicationClosed) {
-				break;
-			} else {
-				int lastError = WSAGetLastError();
-				if (lastError != 0) {
-					printf("UDP sendto failed: %d\n", lastError);
-					controller->DisconnectCall();
-					break;
+		sendCv.wait(lock, [&] { return !sendDataBuffer.empty() || !connected; });
+		lock.unlock();
+		while (!sendDataBuffer.empty() && connected) {
+			// Attempt to pop data from queue
+			Data* data;
+			if (sendDataBuffer.try_pop(data)) {
+				// Data found, send over network
+				resultCode = sendto(hostSocket, data->data, data->size, 0, (sockaddr*)&dest, destSize);
+				// Check for socket error
+				if (resultCode == SOCKET_ERROR) {
+					int lastError = WSAGetLastError();
+					if (lastError == WSAETIMEDOUT) {
+						// Send timed out, free unsent data memory
+						delete data;
+					} else {
+						printf("UDP sendto failed: %d\n", lastError);
+						controller->DisconnectCall();
+						break;
+					}
+				} else {
+					// Send was successful, free data memory
+					delete data;
 				}
 			}
 		}
-		messageSize = 0;
-	} while (true);
+	} while (connected);
 }
 
-bool NetworkerUDP::SendData(char* message, int size) {
+void NetworkerUDP::SendData(char* message, int size) {
 	if (connected) {
-		dataBuffer.push(message);
-		dataSizeBuffer.push(size);
-		bufferCount++;
-		sendShouldWake = true;
-		{
-			std::lock_guard lk(mutex);
-			sendShouldWake = true;
+		Data* data = new Data(message, size);
+		if (!sendDataBuffer.try_emplace(data)) {
+			delete data;
 		}
-		sendCv.notify_one();
-		return true;
 	} else {
-		return false;
+		delete[] message;
 	}
+}
+
+void NetworkerUDP::NotifySendThread() {
+	sendCv.notify_one();
 }

@@ -9,13 +9,13 @@ AudioOutput::AudioOutput() {
 AudioOutput::~AudioOutput() {
     applicationShutdown = true;
     started = false;
-    if (sourceVoice != nullptr && sourceVoice != NULL) {
+    if (sourceVoice != nullptr) {
         sourceVoice->Stop();
         sourceVoice->DestroyVoice();
         sourceVoice = NULL;
     }
     // Stop XAudio2 engine
-    if (xAudio2 != nullptr && xAudio2 != NULL) {
+    if (xAudio2 != nullptr) {
         xAudio2->StopEngine();
         xAudio2->Release();
         xAudio2 = NULL;
@@ -28,6 +28,13 @@ AudioOutput::~AudioOutput() {
 }
 
 bool AudioOutput::Start(WAVEFORMATEX* format) {
+    // Force mono
+    if (format->nChannels > 1) {
+        format->nAvgBytesPerSec /= format->nChannels;
+        format->nBlockAlign /= format->nChannels;
+        format->nChannels = 1;
+    }
+
     frameSize = (format->wBitsPerSample * format->nChannels) / 8;
 
     // Initialise COM
@@ -71,13 +78,13 @@ bool AudioOutput::Start(WAVEFORMATEX* format) {
 
 void AudioOutput::Stop(bool failed) {
     started = false;
-    if (sourceVoice != nullptr && sourceVoice != NULL) {
+    if (sourceVoice != nullptr) {
         sourceVoice->Stop();
         sourceVoice->DestroyVoice();
         sourceVoice = NULL;
     }
     // Stop XAudio2 engine
-    if (xAudio2 != nullptr && xAudio2 != NULL) {
+    if (xAudio2 != nullptr) {
         xAudio2->StopEngine();
         xAudio2->Release();
         xAudio2 = NULL;
@@ -89,12 +96,10 @@ void AudioOutput::Stop(bool failed) {
     }
 }
 
-void AudioOutput::UpdateBuffer(BYTE* buffer, UINT32 frameNum) {
+void AudioOutput::UpdateBuffer(BYTE* buffer, UINT32 size) {
     if (!applicationShutdown) {
-        BYTE* bufferData = new BYTE[frameNum * frameSize];
-        memcpy(bufferData, buffer, frameNum * frameSize);
-        XAUDIO2_BUFFER newBuffer = { 0, frameNum * frameSize, bufferData, 0, 0, 0, 0, 0, nullptr };
-        packetBuffer.push(bufferData);
+        XAUDIO2_BUFFER newBuffer = { 0, size, buffer, 0, 0, 0, 0, 0, nullptr };
+        packetBuffer.push(buffer);
         bufferCount++;
         sourceVoice->SubmitSourceBuffer(&newBuffer);
     }

@@ -5,8 +5,10 @@
 #include <condition_variable>
 #include <mutex>
 #include <thread>
-#include <queue>
+#include <atomic>
+#define WIN32_LEAN_AND_MEAN
 #include <winsock2.h>
+#include <rigtorp/MPMCQueue.h>
 
 class Controller;
 struct sockaddr;
@@ -19,11 +21,26 @@ public:
 	void SetServer(bool pIsServer);
 	void SetSourcePort(unsigned short portNum);
 	void SetDestinationAddress(sockaddr* address);
+	bool IsConnected();
 	bool Connect(const char* ip);
 	void Disconnect();
-	bool SendData(char* message, int size);
+	void SendData(char* message, int size);
+	void NotifySendThread();
 
 private:
+	struct Data {
+		char* data;
+		int size;
+
+		Data(char* dataIn, int sizeIn)
+			: data(dataIn), size(sizeIn) {
+		}
+
+		~Data() {
+			delete data;
+		}
+	};
+
 	void CancelInitialise(std::string disconnectMessage);
 	void ThreadReceive();
 	void ThreadSend();
@@ -35,16 +52,11 @@ private:
 	int destSize;
 	int destWhenServerSize;
 	bool isServer = false;
-	bool connected = false;
+	std::atomic<bool> connected = false;
 	char messageToSend[512];
-	std::queue<char*> dataBuffer;
-	std::queue<int> dataSizeBuffer;
-	int bufferCount = 0;
-	int messageSize = 0;
+	rigtorp::MPMCQueue<Data*> sendDataBuffer;
 	std::condition_variable sendCv;
 	std::mutex mutex;
-	bool sendShouldWake = false;
-	bool lastDisconnectLocal = false;
 	bool applicationClosed = false;
 };
 
