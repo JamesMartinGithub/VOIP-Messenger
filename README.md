@@ -20,3 +20,7 @@ One party needs to select 'server' and port forward to bypass NAT for non-LAN co
 
 ## Gallery:
 <img src="https://github.com/user-attachments/assets/29c48534-47f7-47a5-bc34-266bb743aa1d" width="800" height="603" style="display:none">
+
+## Acknowledgement
+MPMCQueue by Erik Rigtorp is used
+- https://github.com/rigtorp/MPMCQueue
