@@ -8,7 +8,7 @@
 #include <atomic>
 #define WIN32_LEAN_AND_MEAN
 #include <winsock2.h>
-#include <rigtorp/MPMCQueue.h>
+#include <MPMCQueue/include/rigtorp/MPMCQueue.h>
 
 class Controller;
 struct sockaddr;
